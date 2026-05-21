@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>雲端個人便利貼 - Boardy</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts & FontAwesome for Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Caveat:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f3f4f6;
+      background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+    .handwritten {
+      font-family: 'Caveat', cursive, sans-serif;
+    }
+    .note-card {
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .note-card:active {
+      transform: scale(1.02) rotate(1deg) !important;
+      z-index: 50 !important;
+    }
+  </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col select-none">
+
+  <!-- 頂部導航列 -->
+  <header class="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center z-40 shrink-0 shadow-sm">
+    <div class="flex items-center gap-3">
+      <div class="bg-amber-400 text-slate-800 p-2.5 rounded-xl shadow-inner rotate-3">
+        <i class="fa-solid fa-sticky-note text-xl"></i>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold text-gray-800 tracking-tight">Boardy 雲端便利貼</h1>
+        <p class="text-xs text-gray-500">隨時隨地，登入即享</p>
+      </div>
+    </div>
+
+    <!-- 登入狀態與操作區 -->
+    <div id="auth-section" class="flex items-center gap-3">
+      <!-- 載入中 -->
+      <div id="auth-loading" class="text-sm text-gray-500 flex items-center gap-2">
+        <i class="fas fa-spinner fa-spin"></i> 正在連線雲端資料庫...
+      </div>
+      
+      <!-- 未登入狀態 -->
+      <div id="auth-logged-out" class="hidden flex items-center gap-2">
+        <button onclick="openAuthModal('login')" class="px-4 py-2 text-sm font-semibold text-gray-700 hover:text-gray-900 transition">
+          登入
+        </button>
+        <button onclick="openAuthModal('register')" class="px-4 py-2 text-sm font-semibold text-white bg-amber-500 hover:bg-amber-600 rounded-lg shadow transition">
+          免費註冊
+        </button>
+      </div>
+
+      <!-- 已登入狀態 -->
+      <div id="auth-logged-in" class="hidden flex items-center gap-4">
+        <div class="text-right hidden md:block">
+          <p id="user-display-email" class="text-sm font-semibold text-gray-700"></p>
+          <span class="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">已同步至雲端</span>
+        </div>
+        <button onclick="handleLogout()" class="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition" title="登出">
+          <i class="fa-solid fa-right-from-bracket text-lg"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 工具列與控制區 -->
+  <div class="bg-gray-50 border-b border-gray-200 px-6 py-3 flex flex-wrap justify-between items-center gap-3 z-30 shrink-0">
+    <div class="flex items-center gap-2">
+      <button onclick="createNewNote()" class="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium text-sm rounded-lg shadow-sm transition">
+        <i class="fa-solid fa-plus"></i> 新增便利貼
+      </button>
+      <button onclick="reorganizeNotes()" class="flex items-center gap-2 px-3 py-2 bg-white hover:bg-gray-100 text-gray-700 font-medium text-sm rounded-lg border border-gray-200 shadow-sm transition" title="自動整齊排列所有便利貼">
+        <i class="fa-solid fa-grip"></i> 自動排列
+      </button>
+    </div>
+    
+    <!-- 調色盤：點擊直接新增對應顏色的便利貼 -->
+    <div class="flex items-center gap-2">
+      <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider hidden sm:inline">快速新增：</span>
+      <div class="flex gap-1.5">
+        <button onclick="createNewNote('#fef08a')" class="w-6 h-6 rounded-full bg-yellow-200 border border-yellow-300 hover:scale-115 transition" title="黃色"></button>
+        <button onclick="createNewNote('#fca5a5')" class="w-6 h-6 rounded-full bg-red-200 border border-red-300 hover:scale-115 transition" title="紅色"></button>
+        <button onclick="createNewNote('#86efac')" class="w-6 h-6 rounded-full bg-green-200 border border-green-300 hover:scale-115 transition" title="綠色"></button>
+        <button onclick="createNewNote('#93c5fd')" class="w-6 h-6 rounded-full bg-blue-200 border border-blue-300 hover:scale-115 transition" title="藍色"></button>
+        <button onclick="createNewNote('#f5d0fe')" class="w-6 h-6 rounded-full bg-purple-200 border border-purple-300 hover:scale-115 transition" title="紫色"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主畫布 (便利貼置放區) -->
+  <main id="board" class="flex-1 relative overflow-auto p-8 bg-gray-100">
+    <!-- 當沒有便利貼時的引導畫面 -->
+    <div id="empty-state" class="hidden absolute inset-0 flex flex-col justify-center items-center text-center p-6 pointer-events-none">
+      <div class="w-20 h-20 bg-gray-200 rounded-full flex items-center justify-center mb-4 text-gray-400">
+        <i class="fa-solid fa-note-sticky text-3xl"></i>
+      </div>
+      <h3 class="text-lg font-bold text-gray-700">你的畫布空空如也</h3>
+      <p class="text-sm text-gray-500 max-w-sm mt-1">點擊上方「新增便利貼」按鈕，寫下你今天的靈感、待辦事項或是備忘錄吧！</p>
+    </div>
+
+    <!-- 便利貼動態渲染區 -->
+    <div id="notes-container" class="absolute inset-0 min-w-[1500px] min-h-[1500px]"></div>
+  </main>
+
+  <!-- 浮動訊息提示元件 (取代 alert) -->
+  <div id="toast" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 transition-all duration-300 translate-y-20 opacity-0 z-50">
+    <span id="toast-message" class="text-sm font-medium"></span>
+  </div>
+
+  <!-- Auth 燈箱 (註冊 / 登入) -->
+  <div id="auth-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl relative">
+      <button onclick="closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition">
+        <i class="fa-solid fa-xmark text-xl"></i>
+      </button>
+      
+      <div class="text-center mb-6">
+        <div class="inline-flex bg-amber-100 text-amber-600 p-3 rounded-full mb-3">
+          <i id="modal-icon" class="fa-solid fa-user-plus text-2xl"></i>
+        </div>
+        <h2 id="modal-title" class="text-2xl font-bold text-gray-800">建立個人帳號</h2>
+        <p id="modal-desc" class="text-sm text-gray-500 mt-1">建立帳號以在任何裝置同步您的個人便利貼。</p>
+      </div>
+
+      <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">電子郵件信箱</label>
+          <input type="email" id="auth-email" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 focus:bg-white transition" placeholder="you@example.com">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">設定密碼</label>
+          <input type="password" id="auth-password" required minlength="6" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 focus:bg-white transition" placeholder="至少 6 位字元">
+        </div>
+
+        <button type="submit" id="auth-submit-btn" class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl shadow-lg transition duration-200 mt-2">
+          註冊帳號
+        </button>
+      </form>
+
+      <div class="mt-6 pt-6 border-t border-gray-100 text-center text-sm">
+        <span id="modal-switch-text" class="text-gray-500">已經有帳號了嗎？</span>
+        <button onclick="switchAuthMode()" id="modal-switch-btn" class="text-amber-600 font-semibold hover:underline ml-1">
+          立即登入
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FIREBASE 關鍵 SDK 引用 (V11+) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { 
+      getAuth, 
+      onAuthStateChanged, 
+      signInWithCustomToken, 
+      signInAnonymously,
+      signInWithEmailAndPassword,
+      createUserWithEmailAndPassword,
+      signOut
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { 
+      getFirestore, 
+      collection, 
+      doc, 
+      setDoc, 
+      addDoc, 
+      updateDoc, 
+      deleteDoc, 
+      query, 
+      onSnapshot 
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // =========================================================================
+    // FIREBASE 初始化設定區
+    // =========================================================================
+    // 注意：部署到 GitHub 時，請在此處填入你自己在 Firebase Console 取得的 Web SDK 設定。
+    // 如果環境中有預載的 firebaseConfig (預設執行環境)，我們會自動採用。
+    const firebaseConfig = {
+    apiKey: "AIzaSyB3HUJ2BU1RXsvUeR6gAm1e2Nz4R7F8zRI",
+    authDomain: "classroom-lottery.firebaseapp.com",
+    projectId: "classroom-lottery",
+    storageBucket: "classroom-lottery.firebasestorage.app",
+    messagingSenderId: "100958995507",
+    appId: "1:100958995507:web:8ce1769021b0998b150f46"
+  };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-sticky-notes';
+
+    // 全域變數
+    let currentUser = null;
+    let notesList = [];
+    let unsubscribeNotes = null;
+    let dragNoteId = null;
+    let dragOffset = { x: 0, y: 0 };
+    let currentAuthMode = 'register'; // 'register' 或 'login'
+
+    // 常規便利貼預設調色盤
+    const colors = [
+      { bg: '#fef08a', border: '#fde047', text: '#713f12', title: '黃色' },
+      { bg: '#fca5a5', border: '#f87171', text: '#7f1d1d', title: '紅色' },
+      { bg: '#86efac', border: '#4ade80', text: '#064e3b', title: '綠色' },
+      { bg: '#93c5fd', border: '#60a5fa', text: '#1e3a8a', title: '藍色' },
+      { bg: '#f5d0fe', border: '#e879f9', text: '#581c87', title: '紫色' }
+    ];
+
+    // =========================================================================
+    // UI 元件互動函數與對應全域掛載
+    // =========================================================================
+    window.showToast = function(message, duration = 3000) {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toast-message');
+      toastMsg.innerText = message;
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      
+      setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, duration);
+    };
+
+    window.openAuthModal = function(mode = 'register') {
+      currentAuthMode = mode;
+      const modal = document.getElementById('auth-modal');
+      const title = document.getElementById('modal-title');
+      const desc = document.getElementById('modal-desc');
+      const submitBtn = document.getElementById('auth-submit-btn');
+      const switchText = document.getElementById('modal-switch-text');
+      const switchBtn = document.getElementById('modal-switch-btn');
+      const icon = document.getElementById('modal-icon');
+
+      modal.classList.remove('hidden');
+
+      if (mode === 'register') {
+        title.innerText = '建立個人帳號';
+        desc.innerText = '在各電腦或手機登入此帳號，即可隨時讀取、編輯相同便利貼。';
+        submitBtn.innerText = '建立帳號';
+        switchText.innerText = '已經有帳號了嗎？';
+        switchBtn.innerText = '立即登入';
+        icon.className = 'fa-solid fa-user-plus text-2xl';
+      } else {
+        title.innerText = '歡迎回來 Boardy';
+        desc.innerText = '登入帳號以同步載入你先前保存的便利貼內容。';
+        submitBtn.innerText = '登入雲端';
+        switchText.innerText = '還沒有個人帳號嗎？';
+        switchBtn.innerText = '免費註冊';
+        icon.className = 'fa-solid fa-right-to-bracket text-2xl';
+      }
+    };
+
+    window.closeAuthModal = function() {
+      document.getElementById('auth-modal').classList.add('hidden');
+      document.getElementById('auth-form').reset();
+    };
+
+    window.switchAuthMode = function() {
+      openAuthModal(currentAuthMode === 'register' ? 'login' : 'register');
+    };
+
+    // =========================================================================
+    // FIREBASE 帳號驗證處理機制
+    // =========================================================================
+    
+    // 初始化 Auth 登入監聽
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          // 若無 Custom Token，在載入時預設使用 Firebase 匿名登入 (讓使用者能立刻開始用)
+          // 如果使用者之後選擇註冊，匿名帳號可以被轉移或直接註冊新帳號
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error("驗證初始化失敗:", err);
+        showToast("雲端安全驗證失敗，將以離線暫存模式運作");
+      }
+    };
+
+    onAuthStateChanged(auth, (user) => {
+      currentUser = user;
+      const loadingEl = document.getElementById('auth-loading');
+      const loggedOutEl = document.getElementById('auth-logged-out');
+      const loggedInEl = document.getElementById('auth-logged-in');
+      const emailDisplay = document.getElementById('user-display-email');
+
+      loadingEl.classList.add('hidden');
+
+      if (user) {
+        if (user.isAnonymous) {
+          emailDisplay.innerText = "訪客 (匿名使用者)";
+          loggedOutEl.classList.remove('hidden');
+          loggedInEl.classList.add('hidden');
+        } else {
+          emailDisplay.innerText = user.email;
+          loggedOutEl.classList.add('hidden');
+          loggedInEl.classList.remove('hidden');
+        }
+        
+        // 綁定即時資料庫監聽器
+        setupNotesListener(user.uid);
+      } else {
+        loggedOutEl.classList.remove('hidden');
+        loggedInEl.classList.add('hidden');
+        if (unsubscribeNotes) {
+          unsubscribeNotes();
+          unsubscribeNotes = null;
+        }
+        renderNotes([]);
+      }
+    });
+
+    // 處理註冊 / 登入送出
+    window.handleAuthSubmit = async function(e) {
+      e.preventDefault();
+      const email = document.getElementById('auth-email').value;
+      const password = document.getElementById('auth-password').value;
+
+      try {
+        if (currentAuthMode === 'register') {
+          // 建立新使用者
+          await createUserWithEmailAndPassword(auth, email, password);
+          showToast("帳號建立成功！已為你開啟同步雲端畫布。");
+        } else {
+          // 登入
+          await signInWithEmailAndPassword(auth, email, password);
+          showToast("歡迎登入！正在載入您的專屬便利貼...");
+        }
+        closeAuthModal();
+      } catch (err) {
+        console.error("驗證錯誤:", err);
+        let errorMsg = "帳號操作失敗，請檢查輸入";
+        if (err.code === 'auth/email-already-in-use') errorMsg = "此 Email 已被註冊，請直接登入";
+        if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') errorMsg = "密碼輸入錯誤，請重試";
+        if (err.code === 'auth/invalid-email') errorMsg = "無效的 Email 格式";
+        showToast(errorMsg);
+      }
+    };
+
+    // 登出機制
+    window.handleLogout = async function() {
+      try {
+        await signOut(auth);
+        showToast("已成功登出。");
+        // 登出後，會自動觸發 onAuthStateChanged 並重新匿名登入
+        await signInAnonymously(auth);
+      } catch (err) {
+        showToast("登出失敗，請重試");
+      }
+    };
+
+    // =========================================================================
+    // FIRESTORE 便利貼資料庫操作邏輯 (完全遵守規則 1 & 2)
+    // =========================================================================
+    
+    function setupNotesListener(uid) {
+      if (unsubscribeNotes) unsubscribeNotes();
+
+      // Rule 1: 嚴格依照 /artifacts/{appId}/users/{userId}/{collectionName} 路徑建立
+      const notesCollectionRef = collection(db, 'artifacts', appId, 'users', uid, 'notes');
+
+      // Rule 2: 絕不使用複合/複雜查詢，單純拉取集合後在記憶體進行排序
+      unsubscribeNotes = onSnapshot(notesCollectionRef, 
+        (snapshot) => {
+          const notes = [];
+          snapshot.forEach((doc) => {
+            notes.push({ id: doc.id, ...doc.data() });
+          });
+          
+          // 在前端依照建立時間 (createdAt) 排序
+          notes.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+          notesList = notes;
+          renderNotes(notes);
+        },
+        (error) => {
+          console.error("監聽 Firestore 失敗:", error);
+          showToast("同步便利貼時發生資料庫錯誤");
+        }
+      );
+    }
+
+    // 新增便利貼
+    window.createNewNote = async function(colorHex = null) {
+      if (!currentUser) {
+        showToast("尚未完成初始化連線");
+        return;
+      }
+
+      // 隨機挑選預設顏色與擺放位置
+      const randomColor = colors[Math.floor(Math.random() * colors.length)];
+      const bg = colorHex || randomColor.bg;
+      
+      const containerWidth = document.getElementById('board').clientWidth;
+      const x = Math.max(20, Math.floor(Math.random() * (containerWidth - 300)));
+      const y = Math.max(20, Math.floor(Math.random() * 250) + 20);
+      const angle = (Math.random() * 6 - 3).toFixed(1); // 隨機斜角 (-3 到 3 度)
+      
+      const newNote = {
+        text: "寫點什麼...",
+        x: x,
+        y: y,
+        bgColor: bg,
+        angle: parseFloat(angle),
+        createdAt: Date.now()
+      };
+
+      try {
+        const notesCollectionRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'notes');
+        await addDoc(notesCollectionRef, newNote);
+      } catch (err) {
+        console.error("新增失敗:", err);
+        showToast("新增便利貼失敗，請確認網路連線");
+      }
+    };
+
+    // 刪除便利貼
+    window.deleteNote = async function(noteId) {
+      if (!currentUser) return;
+      try {
+        const noteDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', noteId);
+        await deleteDoc(noteDocRef);
+        showToast("已刪除便利貼");
+      } catch (err) {
+        console.error("刪除失敗:", err);
+        showToast("刪除失敗");
+      }
+    };
+
+    // 修改文字 (防抖處理以避免過於頻繁寫入資料庫)
+    let updateTimeoutMap = {};
+    window.updateNoteText = function(noteId, text) {
+      if (!currentUser) return;
+      
+      if (updateTimeoutMap[noteId]) clearTimeout(updateTimeoutMap[noteId]);
+
+      // 防抖 400 毫秒
+      updateTimeoutMap[noteId] = setTimeout(async () => {
+        try {
+          const noteDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', noteId);
+          await updateDoc(noteDocRef, { text: text });
+        } catch (err) {
+          console.error("文字更新失敗:", err);
+        }
+      }, 400);
+    };
+
+    // 變更便利貼顏色
+    window.updateNoteColor = async function(noteId, colorHex) {
+      if (!currentUser) return;
+      try {
+        const noteDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', noteId);
+        await updateDoc(noteDocRef, { bgColor: colorHex });
+      } catch (err) {
+        console.error("顏色修改失敗:", err);
+      }
+    };
+
+    // 更新位置 (拖曳完成時儲存)
+    window.updateNotePosition = async function(noteId, x, y) {
+      if (!currentUser) return;
+      try {
+        const noteDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', noteId);
+        await updateDoc(noteDocRef, { x: Math.max(0, x), y: Math.max(0, y) });
+      } catch (err) {
+        console.error("位置更新失敗:", err);
+      }
+    };
+
+    // 自動排整齊
+    window.reorganizeNotes = async function() {
+      if (!currentUser || notesList.length === 0) return;
+      
+      showToast("正在為您重新排列便利貼...");
+      const cols = Math.min(Math.floor(document.getElementById('board').clientWidth / 280), 5) || 1;
+      const startX = 40;
+      const startY = 40;
+      const gapX = 260;
+      const gapY = 260;
+
+      for (let i = 0; i < notesList.length; i++) {
+        const note = notesList[i];
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+        const targetX = startX + col * gapX;
+        const targetY = startY + row * gapY;
+
+        try {
+          const noteDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'notes', note.id);
+          await updateDoc(noteDocRef, { x: targetX, y: targetY, angle: 0 });
+        } catch (err) {
+          console.error("重排失敗:", err);
+        }
+      }
+    };
+
+    // =========================================================================
+    // UI 渲染與 DOM 操作
+    // =========================================================================
+    function renderNotes(notes) {
+      const container = document.getElementById('notes-container');
+      const emptyState = document.getElementById('empty-state');
+      
+      if (notes.length === 0) {
+        emptyState.classList.remove('hidden');
+        container.innerHTML = '';
+        return;
+      } else {
+        emptyState.classList.add('hidden');
+      }
+
+      // 用於不覆蓋已被使用者選取正在編輯的便利貼
+      const currentActiveElement = document.activeElement;
+      const activeNoteId = currentActiveElement?.dataset?.noteId;
+      const activeSelectionStart = currentActiveElement?.selectionStart;
+      const activeSelectionEnd = currentActiveElement?.selectionEnd;
+
+      // 快速渲染，若便利貼元件已存在則只更新內容或樣式，否則重新建立 (確保輸入時不會因重新渲染失去游標焦點)
+      notes.forEach((note) => {
+        let noteEl = document.getElementById(`note-${note.id}`);
+        const isCurrentlyEditing = activeNoteId === note.id;
+
+        if (!noteEl) {
+          // 建立全新便利貼 DOM 節點
+          noteEl = document.createElement('div');
+          noteEl.id = `note-${note.id}`;
+          noteEl.className = "note-card absolute w-60 h-60 p-4 rounded-lg shadow-md border flex flex-col cursor-move";
+          
+          noteEl.innerHTML = `
+            <!-- 頂部控制把手 -->
+            <div class="note-header flex justify-between items-center mb-2 select-none handle">
+              <div class="flex gap-1 opacity-0 group-hover:opacity-100 note-colors transition">
+                <!-- 動態注入顏色按鈕 -->
+              </div>
+              <button class="delete-btn text-gray-400 hover:text-red-500 transition" title="刪除">
+                <i class="fa-solid fa-trash-can text-sm"></i>
+              </button>
+            </div>
+            
+            <!-- 內文編輯區 -->
+            <textarea 
+              data-note-id="${note.id}"
+              class="note-textarea flex-1 bg-transparent border-none resize-none focus:outline-none focus:ring-0 text-sm font-medium leading-relaxed"
+              placeholder="開始輸入..."
+            ></textarea>
+            
+            <!-- 底部時間標記 -->
+            <div class="text-[10px] text-gray-400 text-right mt-1 select-none pointer-events-none">
+              ${new Date(note.createdAt || Date.now()).toLocaleDateString()}
+            </div>
+          `;
+          
+          container.appendChild(noteEl);
+
+          // 綁定事件監聽
+          const textarea = noteEl.querySelector('.note-textarea');
+          textarea.addEventListener('input', (e) => updateNoteText(note.id, e.target.value));
+
+          const deleteBtn = noteEl.querySelector('.delete-btn');
+          deleteBtn.addEventListener('click', () => deleteNote(note.id));
+
+          // 建立各便利貼自帶的小型變色調色盤
+          const colorsDiv = noteEl.querySelector('.note-colors');
+          colors.forEach(c => {
+            const colorDot = document.createElement('button');
+            colorDot.className = "w-3 h-3 rounded-full border border-black/10 hover:scale-125 transition";
+            colorDot.style.backgroundColor = c.bg;
+            colorDot.title = c.title;
+            colorDot.addEventListener('click', () => updateNoteColor(note.id, c.bg));
+            colorsDiv.appendChild(colorDot);
+          });
+
+          // 設置滑鼠與觸控拖曳事件
+          setupDragAndDrop(noteEl, note.id);
+        }
+
+        // 更新外觀屬性 (位置、顏色、傾斜角度、層級)
+        noteEl.style.left = `${note.x}px`;
+        noteEl.style.top = `${note.y}px`;
+        noteEl.style.backgroundColor = note.bgColor || '#fef08a';
+        noteEl.style.borderColor = getBorderColorByBg(note.bgColor || '#fef08a');
+        noteEl.style.transform = `rotate(${note.angle || 0}deg)`;
+        
+        const textarea = noteEl.querySelector('.note-textarea');
+        textarea.style.color = getTextColorByBg(note.bgColor || '#fef08a');
+
+        // 如果目前不是正在打字的狀態，則同步資料庫文字
+        if (!isCurrentlyEditing) {
+          textarea.value = note.text || '';
+        }
+      });
+
+      // 清除資料庫已不存在但畫面上還留著的便利貼 DOM
+      const existingCards = container.querySelectorAll('.note-card');
+      existingCards.forEach(card => {
+        const id = card.id.replace('note-', '');
+        if (!notes.find(n => n.id === id)) {
+          card.remove();
+        }
+      });
+
+      // 恢復焦點及游標位置 (關鍵，防止文字輸入閃爍)
+      if (activeNoteId) {
+        const activeTextarea = document.querySelector(`textarea[data-note-id="${activeNoteId}"]`);
+        if (activeTextarea) {
+          activeTextarea.focus();
+          try {
+            activeTextarea.setSelectionRange(activeSelectionStart, activeSelectionEnd);
+          } catch(e) {}
+        }
+      }
+    }
+
+    // 輔助函式：根據背景色取得對應邊框
+    function getBorderColorByBg(bgColor) {
+      const match = colors.find(c => c.bg.toLowerCase() === bgColor.toLowerCase());
+      return match ? match.border : '#e5e7eb';
+    }
+
+    // 輔助函式：根據背景色取得對應文字色
+    function getTextColorByBg(bgColor) {
+      const match = colors.find(c => c.bg.toLowerCase() === bgColor.toLowerCase());
+      return match ? match.text : '#1f2937';
+    }
+
+    // =========================================================================
+    // 拖曳 (Drag & Drop) 功能整合 (支援 Desktop 與 Mobile)
+    // =========================================================================
+    function setupDragAndDrop(element, noteId) {
+      // 電腦滑鼠拖曳
+      element.addEventListener('mousedown', (e) => {
+        // 如果是點擊輸入框、刪除鈕或選色鈕，不觸發拖曳
+        if (e.target.tagName === 'TEXTAREA' || e.target.closest('button')) return;
+        
+        e.preventDefault();
+        dragNoteId = noteId;
+        
+        // 把當前拖曳的便利貼帶到最前面
+        document.querySelectorAll('.note-card').forEach(card => card.style.zIndex = '10');
+        element.style.zIndex = '40';
+
+        const rect = element.getBoundingClientRect();
+        const boardRect = document.getElementById('board').getBoundingClientRect();
+        
+        dragOffset.x = e.clientX - rect.left;
+        dragOffset.y = e.clientY - rect.top;
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      });
+
+      // 行動裝置觸控拖曳
+      element.addEventListener('touchstart', (e) => {
+        if (e.target.tagName === 'TEXTAREA' || e.target.closest('button')) return;
+        
+        dragNoteId = noteId;
+        document.querySelectorAll('.note-card').forEach(card => card.style.zIndex = '10');
+        element.style.zIndex = '40';
+
+        const touch = e.touches[0];
+        const rect = element.getBoundingClientRect();
+        
+        dragOffset.x = touch.clientX - rect.left;
+        dragOffset.y = touch.clientY - rect.top;
+
+        document.addEventListener('touchmove', onTouchMove, { passive: false });
+        document.addEventListener('touchend', onTouchEnd);
+      });
+
+      function onMouseMove(e) {
+        if (dragNoteId !== noteId) return;
+        moveElement(e.clientX, e.clientY);
+      }
+
+      function onTouchMove(e) {
+        if (dragNoteId !== noteId) return;
+        e.preventDefault(); // 阻止滾動螢幕
+        const touch = e.touches[0];
+        moveElement(touch.clientX, touch.clientY);
+      }
+
+      function moveElement(clientX, clientY) {
+        const board = document.getElementById('board');
+        const boardRect = board.getBoundingClientRect();
+        
+        // 計算相對於畫布主容器內部的 X, Y 座標 (考量到畫布自身的滾動條 scrollLeft, scrollTop)
+        const x = clientX - boardRect.left - dragOffset.x + board.scrollLeft;
+        const y = clientY - boardRect.top - dragOffset.y + board.scrollTop;
+
+        element.style.left = `${Math.max(0, x)}px`;
+        element.style.top = `${Math.max(0, y)}px`;
+      }
+
+      function onMouseUp() {
+        if (dragNoteId === noteId) {
+          const finalX = parseInt(element.style.left);
+          const finalY = parseInt(element.style.top);
+          updateNotePosition(noteId, finalX, finalY);
+          dragNoteId = null;
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        }
+      }
+
+      function onTouchEnd() {
+        if (dragNoteId === noteId) {
+          const finalX = parseInt(element.style.left);
+          const finalY = parseInt(element.style.top);
+          updateNotePosition(noteId, finalX, finalY);
+          dragNoteId = null;
+          document.removeEventListener('touchmove', onTouchMove);
+          document.removeEventListener('touchend', onTouchEnd);
+        }
+      }
+    }
+
+    // =========================================================================
+    // 網頁啟動初始化
+    // =========================================================================
+    window.onload = function() {
+      initAuth();
+    };
+
+  </script>
+</body>
+</html>
